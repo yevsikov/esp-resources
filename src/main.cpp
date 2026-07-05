@@ -4,7 +4,9 @@ class AppConfig {
 public:
   static constexpr uint32_t kBaudrate = 115200;
   static constexpr uint8_t kLedPin = 5;
+  static constexpr uint8_t kButtonPin = 8;
   static constexpr uint32_t kBlinkIntervalMs = 1000;
+  static constexpr uint32_t kButtonDebounceMs = 150;
   static const uint8_t kShortPressBlinkCount = 3;
   static constexpr uint16_t kLoopReportEveryIterations = 1000;
 };
@@ -40,8 +42,29 @@ Led led(AppConfig::kLedPin);
 LedMode currentMode = LedMode::Blink;
 LedState currentState = LedState::Off;
 uint32_t lastToggleMs = {};
+uint32_t lastButtonHandledMs = {};
 uint32_t loopIterations = {};
 uint64_t loopDurationUsTotal = {};
+volatile bool buttonPressed = false;
+
+void IRAM_ATTR onButtonPressedIsr() {
+  buttonPressed = true;
+}
+
+void goToNextMode() {
+  switch (currentMode) {
+    case LedMode::Blink:
+      currentMode = LedMode::AlwaysOn;
+      break;
+    case LedMode::AlwaysOn:
+      currentMode = LedMode::AlwaysOff;
+      break;
+    case LedMode::AlwaysOff:
+    default:
+      currentMode = LedMode::Blink;
+      break;
+  }
+}
 
 void runSuperloopStep(uint32_t now) {
   if (currentMode == LedMode::Blink) {
@@ -69,11 +92,41 @@ void setup() {
   Serial.begin(AppConfig::kBaudrate);
   led.init();
   led.set(currentState);
+
+  pinMode(AppConfig::kButtonPin, INPUT);
+  attachInterrupt(
+      digitalPinToInterrupt(AppConfig::kButtonPin), onButtonPressedIsr, RISING);
 }
 
 void loop() {
   const uint32_t startedUs = micros();
   const uint32_t now = millis();
+
+  bool pressed = false;
+  noInterrupts();
+  if (buttonPressed) {
+    buttonPressed = false;
+    pressed = true;
+  }
+  interrupts();
+
+  if (pressed) {
+    if (now - lastButtonHandledMs >= AppConfig::kButtonDebounceMs) {
+      lastButtonHandledMs = now;
+      goToNextMode();
+
+      const char *modeText = "blink";
+      if (currentMode == LedMode::AlwaysOn) {
+        modeText = "always_on";
+      } else if (currentMode == LedMode::AlwaysOff) {
+        modeText = "always_off";
+      }
+
+      Serial.print("mode=");
+      Serial.println(modeText);
+    }
+  }
+
   runSuperloopStep(now);
   const uint32_t loopDurationUs = micros() - startedUs;
 
