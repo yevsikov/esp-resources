@@ -13,6 +13,12 @@ enum class LedState : uint8_t {
   On
 };
 
+enum class LedMode : uint8_t {
+  Blink,
+  AlwaysOn,
+  AlwaysOff
+};
+
 class Led {
 public:
   explicit Led(uint8_t pin) : pin_(pin) {}
@@ -30,6 +36,7 @@ private:
 };
 
 Led led(AppConfig::kLedPin);
+LedMode currentMode = LedMode::Blink;
 LedState currentState = LedState::Off;
 uint32_t lastToggleMs = {};
 
@@ -41,14 +48,25 @@ void setup() {
 
 void loop() {
   const uint32_t now = millis();
-  if (now - lastToggleMs < AppConfig::kBlinkIntervalMs) {
+
+  if (currentMode == LedMode::Blink) {
+    if (now - lastToggleMs < AppConfig::kBlinkIntervalMs) {
+      return;
+    }
+
+    lastToggleMs = now;
+    currentState = (currentState == LedState::On) ? LedState::Off : LedState::On;
+    led.set(currentState);
+    Serial.println(currentState == LedState::On ? "on" : "off");
     return;
   }
 
-  lastToggleMs = now;
-  currentState = (currentState == LedState::On) ? LedState::Off : LedState::On;
-  led.set(currentState);
-
-  Serial.println(currentState == LedState::On ? "on" : "off");
+  const LedState targetState =
+      (currentMode == LedMode::AlwaysOn) ? LedState::On : LedState::Off;
+  if (currentState != targetState) {
+    currentState = targetState;
+    led.set(currentState);
+    Serial.println(currentState == LedState::On ? "on" : "off");
+  }
 }
 
