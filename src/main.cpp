@@ -11,24 +11,42 @@ enum class LedState : uint8_t {
   On
 };
 
-LedState currentState = LedState::Off;
+class Led {
+public:
+  explicit Led(uint8_t pin) : pin_(pin) {}
 
-void setLedState(LedState state) {
-  currentState = state;
-  digitalWrite(LED_PIN, state == LedState::On ? HIGH : LOW);
-  Serial.println(state == LedState::On ? "on" : "off");
-}
+  void init() const {
+    pinMode(pin_, OUTPUT);
+  }
+
+  void set(LedState state) const {
+    digitalWrite(pin_, state == LedState::On ? HIGH : LOW);
+  }
+
+private:
+  uint8_t pin_;
+};
+
+Led led(LED_PIN);
+LedState currentState = LedState::Off;
+uint32_t lastToggleMs = 0;
 
 void setup() {
   Serial.begin(BAUDRATE);
-  pinMode(LED_PIN, OUTPUT);
+  led.init();
+  led.set(currentState);
 }
 
 void loop() {
-  setLedState(LedState::On);
-  delay(BLINK_INTERVAL_MS);
+  const uint32_t now = millis();
+  if (now - lastToggleMs < BLINK_INTERVAL_MS) {
+    return;
+  }
 
-  setLedState(LedState::Off);
-  delay(BLINK_INTERVAL_MS);
+  lastToggleMs = now;
+  currentState = (currentState == LedState::On) ? LedState::Off : LedState::On;
+  led.set(currentState);
+
+  Serial.println(currentState == LedState::On ? "on" : "off");
 }
 
