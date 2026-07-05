@@ -1,10 +1,12 @@
 #include <Arduino.h>
 
-namespace {
-  constexpr uint32_t BAUDRATE = 115200;
-  constexpr uint8_t LED_PIN = 5;
-  constexpr uint32_t BLINK_INTERVAL_MS = 1000;
-}
+class AppConfig {
+public:
+  static constexpr uint32_t kBaudrate = 115200;
+  static constexpr uint8_t kLedPin = 5;
+  static constexpr uint32_t kBlinkIntervalMs = 1000;
+  static const uint8_t kShortPressBlinkCount = 3;
+};
 
 enum class LedState : uint8_t {
   Off,
@@ -27,19 +29,19 @@ private:
   uint8_t pin_;
 };
 
-Led led(LED_PIN);
+Led led(AppConfig::kLedPin);
 LedState currentState = LedState::Off;
-uint32_t lastToggleMs = 0;
+uint32_t lastToggleMs = {};
 
 void setup() {
-  Serial.begin(BAUDRATE);
+  Serial.begin(AppConfig::kBaudrate);
   led.init();
   led.set(currentState);
 }
 
 void loop() {
   const uint32_t now = millis();
-  if (now - lastToggleMs < BLINK_INTERVAL_MS) {
+  if (now - lastToggleMs < AppConfig::kBlinkIntervalMs) {
     return;
   }
 
