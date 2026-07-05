@@ -38,60 +38,65 @@ private:
   uint8_t pin_;
 };
 
-Led led(AppConfig::kLedPin);
-LedMode currentMode = LedMode::Blink;
-LedState currentState = LedState::Off;
-uint32_t lastToggleMs = {};
-uint32_t lastButtonHandledMs = {};
-uint32_t loopIterations = {};
-uint64_t loopDurationUsTotal = {};
-volatile bool buttonPressed = false;
+struct AppState {
+  Led led{AppConfig::kLedPin};
+  LedMode currentMode = LedMode::Blink;
+  LedState currentState = LedState::Off;
+  uint32_t lastToggleMs = {};
+  uint32_t lastButtonHandledMs = {};
+  uint32_t loopIterations = {};
+  uint64_t loopDurationUsTotal = {};
+  volatile bool buttonPressed = false;
+};
+
+AppState app;
 
 void IRAM_ATTR onButtonPressedIsr() {
-  buttonPressed = true;
+  app.buttonPressed = true;
 }
 
 void goToNextMode() {
-  switch (currentMode) {
+  switch (app.currentMode) {
     case LedMode::Blink:
-      currentMode = LedMode::AlwaysOn;
+      app.currentMode = LedMode::AlwaysOn;
       break;
     case LedMode::AlwaysOn:
-      currentMode = LedMode::AlwaysOff;
+      app.currentMode = LedMode::AlwaysOff;
       break;
     case LedMode::AlwaysOff:
     default:
-      currentMode = LedMode::Blink;
+      app.currentMode = LedMode::Blink;
       break;
   }
 }
 
 void runSuperloopStep(uint32_t now) {
-  if (currentMode == LedMode::Blink) {
-    if (now - lastToggleMs < AppConfig::kBlinkIntervalMs) {
+  if (app.currentMode == LedMode::Blink) {
+    if (now - app.lastToggleMs < AppConfig::kBlinkIntervalMs) {
       return;
     }
 
-    lastToggleMs = now;
-    currentState = (currentState == LedState::On) ? LedState::Off : LedState::On;
-    led.set(currentState);
-    Serial.println(currentState == LedState::On ? "on" : "off");
+    app.lastToggleMs = now;
+    app.currentState =
+        (app.currentState == LedState::On) ? LedState::Off : LedState::On;
+    app.led.set(app.currentState);
+    Serial.println(app.currentState == LedState::On ? "on" : "off");
     return;
   }
 
   const LedState targetState =
-      (currentMode == LedMode::AlwaysOn) ? LedState::On : LedState::Off;
-  if (currentState != targetState) {
-    currentState = targetState;
-    led.set(currentState);
-    Serial.println(currentState == LedState::On ? "on" : "off");
+      (app.currentMode == LedMode::AlwaysOn) ? LedState::On : LedState::Off;
+  if (app.currentState != targetState) {
+    app.currentState = targetState;
+    app.led.set(app.currentState);
+    Serial.println(app.currentState == LedState::On ? "on" : "off");
   }
 }
 
 void setup() {
   Serial.begin(AppConfig::kBaudrate);
-  led.init();
-  led.set(currentState);
+  app.led.init();
+  app.led.set(app.currentState);
 
   pinMode(AppConfig::kButtonPin, INPUT);
   attachInterrupt(
@@ -104,21 +109,21 @@ void loop() {
 
   bool pressed = false;
   noInterrupts();
-  if (buttonPressed) {
-    buttonPressed = false;
+  if (app.buttonPressed) {
+    app.buttonPressed = false;
     pressed = true;
   }
   interrupts();
 
   if (pressed) {
-    if (now - lastButtonHandledMs >= AppConfig::kButtonDebounceMs) {
-      lastButtonHandledMs = now;
+    if (now - app.lastButtonHandledMs >= AppConfig::kButtonDebounceMs) {
+      app.lastButtonHandledMs = now;
       goToNextMode();
 
       const char *modeText = "blink";
-      if (currentMode == LedMode::AlwaysOn) {
+      if (app.currentMode == LedMode::AlwaysOn) {
         modeText = "always_on";
-      } else if (currentMode == LedMode::AlwaysOff) {
+      } else if (app.currentMode == LedMode::AlwaysOff) {
         modeText = "always_off";
       }
 
@@ -130,18 +135,18 @@ void loop() {
   runSuperloopStep(now);
   const uint32_t loopDurationUs = micros() - startedUs;
 
-  ++loopIterations;
-  loopDurationUsTotal += loopDurationUs;
-  if (loopIterations >= AppConfig::kLoopReportEveryIterations) {
+  ++app.loopIterations;
+  app.loopDurationUsTotal += loopDurationUs;
+  if (app.loopIterations >= AppConfig::kLoopReportEveryIterations) {
     const uint32_t avgLoopDurationUs =
-        static_cast<uint32_t>(loopDurationUsTotal / loopIterations);
+        static_cast<uint32_t>(app.loopDurationUsTotal / app.loopIterations);
     Serial.print("loop_us last=");
     Serial.print(loopDurationUs);
     Serial.print(" avg=");
     Serial.println(avgLoopDurationUs);
 
-    loopIterations = {};
-    loopDurationUsTotal = {};
+    app.loopIterations = {};
+    app.loopDurationUsTotal = {};
   }
 }
 
